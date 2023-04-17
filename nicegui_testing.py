@@ -2,13 +2,14 @@
 from typing import Dict
 
 from nicegui import ui
+import numpy as np
 
 ui.label('Well Penetration Direction')
 penetration_direction = ui.radio(['i', 'j', 'k'], value='k').props('inline')
 
-x_permeability = ui.number(label='Permeability X', value=100, )
-y_permeability = ui.number(label='Permeability Y', value=100, )
-z_permeability = ui.number(label='Permeability Z', value=10, )
+x_permeability = ui.number(label='Permeability X', value=0.001, )
+y_permeability = ui.number(label='Permeability Y', value=0.001, )
+z_permeability = ui.number(label='Permeability Z', value=0.0001, )
 
 x_dimension = ui.number(label='X Dimension', value=100, )
 y_dimension = ui.number(label='Y Dimension', value=100, )
@@ -17,9 +18,68 @@ z_dimension = ui.number(label='Z Dimension', value=10, )
 wellbore_radius = ui.number(label='Wellbore Radius', value=0.3125, )
 skin = ui.number(label='Skin', value=0, )
 
-calculate_button = ui.button('Calculate!', on_click=lambda: result.set_text(wellbore_radius.value))
+calculate_button = ui.button('Calculate!',
+                             on_click=lambda: update_table_and_calculate_transmissibility(penetration_direction.value,
+                                                                                          x_dimension.value,
+                                                                                          y_dimension.value,
+                                                                                          z_dimension.value,
+                                                                                          x_permeability.value,
+                                                                                          y_permeability.value,
+                                                                                          z_permeability.value,
+                                                                                          wellbore_radius.value,
+                                                                                          skin.value))
 
-result = ui.label()
+grid = ui.aggrid({
+    'columnDefs': [
+        {'resizable':True, 'sortable':True, 'headerName': '#', 'field': 'index'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Penetration Direction', 'field': 'penetration_direction'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Perm X', 'field': 'permx'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Perm Y', 'field': 'permy'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Perm Z', 'field': 'permz'},
+        {'resizable':True, 'sortable':True, 'headerName': 'X Dimension', 'field': 'dimx'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Y Dimension', 'field': 'dimy'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Z Dimension', 'field': 'dimz'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Wellbore Radius', 'field': 'wellbore_radius'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Skin', 'field': 'skin'},
+        {'resizable':True, 'sortable':True, 'headerName': 'Transmissibility', 'field': 'transmissibility'}
+    ],
+    'rowData': [
+    ],
+    'rowSelection': 'multiple',
+}).classes('max-h-1000')
+grid.options['sortable'] = True
+# grid.options['height'] = '100%'
+# grid.options['width'] = '50%'
+ui.button(text='clear', on_click=lambda: clear())
+
+
+# ui.button(text='clear', on_click=lambda: grid.call_api_method('undoCellEditing'))
+
+
+# grid.call_api_method("setWidthAndHeight('60%')")
+def update_table(penetration_direction, x_dimension, y_dimension, z_dimension, x_permeability,
+                 y_permeability, z_permeability, wellbore_radius, skin, transmissibility):
+
+    grid.options['rowData'].append({
+        'index':len(grid.options['rowData'])+1,
+        'penetration_direction': penetration_direction,
+        'permx': x_permeability,
+        'permy': y_permeability,
+        'permz': z_permeability,
+        'dimx': x_dimension,
+        'dimy': y_dimension,
+        'dimz': z_dimension,
+        'wellbore_radius': wellbore_radius,
+        'skin': skin,
+        'transmissibility': transmissibility
+    })
+    print(transmissibility)
+    grid.update()
+
+
+def clear():
+    grid.options['rowData'] = []
+    grid.update()
 
 
 def calculate_transmissibility(penetration_direction, x_dimension, y_dimension, z_dimension, x_permeability,
@@ -27,8 +87,8 @@ def calculate_transmissibility(penetration_direction, x_dimension, y_dimension, 
     conversion = 0.001127
     if penetration_direction == 'i':
         equivalent_radius = 0.28 * (z_dimension ** 2 * (y_permeability / z_permeability) ** 0.5 + y_dimension ** 2 * (
-                x_permeability / y_permeability) ** 0.5) ** 0.5 / ((y_permeability / z_permeability) ** 0.25 + (
-                x_permeability / y_permeability) ** 0.25)
+                z_permeability / y_permeability) ** 0.5) ** 0.5 / ((y_permeability / z_permeability) ** 0.25 + (
+                z_permeability / y_permeability) ** 0.25)
         transmissibility = conversion * 2 * np.pi * x_permeability * x_dimension / (
                 np.log(equivalent_radius / wellbore_radius) + skin)
     elif penetration_direction == 'j':
@@ -43,6 +103,18 @@ def calculate_transmissibility(penetration_direction, x_dimension, y_dimension, 
                 x_permeability / y_permeability) ** 0.25)
         transmissibility = conversion * 2 * np.pi * z_permeability * z_dimension / (
                 np.log(equivalent_radius / wellbore_radius) + skin)
+    return transmissibility
+
+
+def update_table_and_calculate_transmissibility(penetration_direction, x_dimension, y_dimension, z_dimension,
+                                                x_permeability,
+                                                y_permeability, z_permeability, wellbore_radius, skin):
+    transmissibility = calculate_transmissibility(penetration_direction, x_dimension, y_dimension, z_dimension,
+                                                  x_permeability,
+                                                  y_permeability, z_permeability, wellbore_radius, skin)
+    update_table(penetration_direction, x_dimension, y_dimension, z_dimension, x_permeability,
+                 y_permeability, z_permeability, wellbore_radius, skin, transmissibility)
+    return transmissibility
 
 
 #
@@ -103,4 +175,4 @@ def calculate_transmissibility(penetration_direction, x_dimension, y_dimension, 
 #
 
 
-ui.run()
+ui.run(host='127.0.0.1', port=8081)
